@@ -130,23 +130,23 @@ resultado.to_excel(
 
 
 # Métricas
-# agregadas = len(
-#    resultado[
-#        resultado["Estado"] == "AGREGADA"
-#    ]
-# )
+agregadas = len(
+    resultado[
+        resultado["Estado"] == "AGREGADA"
+    ]
+)
 
-# modificadas = len(
-#    resultado[
-#        resultado["Estado"] == "MODIFICADA"
-#    ]
-# )
+ modificadas = len(
+    resultado[
+        resultado["Estado"] == "MODIFICADA"
+    ]
+)
 
-# eliminadas = len(
-#    resultado[
-#        resultado["Estado"] == "ELIMINADA"
-#    ]
-# )
+ eliminadas = len(
+    resultado[
+        resultado["Estado"] == "ELIMINADA"
+    ]
+)
 
 agregadas = 0
 modificadas = 0
