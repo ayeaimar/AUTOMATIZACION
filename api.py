@@ -19,23 +19,26 @@ class ComparacionRequest(BaseModel):
 
 @app.post("/comparar")
 def comparar(data: ComparacionRequest):
-    # Crear carpetas dinámicamente si no existen
     os.makedirs(HISTORIAL_VIEJO, exist_ok=True)
     os.makedirs(HISTORIAL_NUEVO, exist_ok=True)
 
-    path_viejo = os.path.join(HISTORIAL_VIEJO, data.nombre_viejo)
-    path_nuevo = os.path.join(HISTORIAL_NUEVO, data.nombre_nuevo)
+    # Sanitizar nombres de archivo
+    nombre_v = os.path.basename(data.nombre_viejo.strip())
+    nombre_n = os.path.basename(data.nombre_nuevo.strip())
 
-    # Decodificar y escribir los archivos reales de SharePoint en Render
+    path_viejo = os.path.join(HISTORIAL_VIEJO, nombre_v)
+    path_nuevo = os.path.join(HISTORIAL_NUEVO, nombre_n)
+
+    # Escribir los archivos en disco
     with open(path_viejo, "wb") as f:
         f.write(base64.b64decode(data.contenido_viejo_base64))
 
     with open(path_nuevo, "wb") as f:
         f.write(base64.b64decode(data.contenido_nuevo_base64))
 
-    # Ejecutar el script original de comparación
+    # Ejecutar script
     resultado = subprocess.run(
-        ["python", "ejecutar_comparacion.py", data.nombre_viejo, data.nombre_nuevo],
+        ["python", "ejecutar_comparacion.py", nombre_v, nombre_n],
         capture_output=True,
         text=True
     )
