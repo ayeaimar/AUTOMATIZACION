@@ -10,6 +10,7 @@ app = FastAPI()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HISTORIAL_VIEJO = os.path.join(BASE_DIR, "Historial_Viejo")
 HISTORIAL_NUEVO = os.path.join(BASE_DIR, "Historial_Nuevo")
+RESULTADOS_DIR = os.path.join(BASE_DIR, "Resultados")
 
 class ComparacionRequest(BaseModel):
     nombre_viejo: str
@@ -21,19 +22,11 @@ class ComparacionRequest(BaseModel):
 def comparar(data: ComparacionRequest):
     os.makedirs(HISTORIAL_VIEJO, exist_ok=True)
     os.makedirs(HISTORIAL_NUEVO, exist_ok=True)
+    os.makedirs(RESULTADOS_DIR, exist_ok=True)
 
-    # Limpiar y sanear nombres de archivos recibidos desde Power Automate
-    nombre_v = os.path.basename(data.nombre_viejo.strip().replace('"', '').replace("'", ""))
-    nombre_n = os.path.basename(data.nombre_nuevo.strip().replace('"', '').replace("'", ""))
-
-    # Garantizar extensión .docx si Power Automate la omite
-    if not nombre_v.lower().endswith(".docx"):
-        nombre_v += ".docx"
-    if not nombre_n.lower().endswith(".docx"):
-        nombre_n += ".docx"
-
-    path_viejo = os.path.join(HISTORIAL_VIEJO, nombre_v)
-    path_nuevo = os.path.join(HISTORIAL_NUEVO, nombre_n)
+    # Nombres fijos de trabajo en el servidor para evitar fallas de encoding/espacios
+    path_viejo = os.path.join(HISTORIAL_VIEJO, "documento_viejo.docx")
+    path_nuevo = os.path.join(HISTORIAL_NUEVO, "documento_nuevo.docx")
 
     # Guardar archivos binarios en disco
     with open(path_viejo, "wb") as f:
@@ -42,14 +35,13 @@ def comparar(data: ComparacionRequest):
     with open(path_nuevo, "wb") as f:
         f.write(base64.b64decode(data.contenido_nuevo_base64))
 
-    # Ejecutar comparación con los nombres limpios
+    # Ejecutar script con los nombres fijos creados
     resultado = subprocess.run(
-        ["python", "ejecutar_comparacion.py", nombre_v, nombre_n],
+        ["python", "ejecutar_comparacion.py", "documento_viejo.docx", "documento_nuevo.docx"],
         capture_output=True,
         text=True
     )
 
-    RESULTADOS_DIR = os.path.join(BASE_DIR, "Resultados")
     exceles = glob.glob(os.path.join(RESULTADOS_DIR, "*.xlsx"))
     docxs = glob.glob(os.path.join(RESULTADOS_DIR, "*.docx"))
 
@@ -63,8 +55,8 @@ def comparar(data: ComparacionRequest):
 
     return {
         "estado": "ok",
-        "archivo_viejo": nombre_v,
-        "archivo_nuevo": nombre_n,
+        "archivo_viejo": data.nombre_viejo,
+        "archivo_nuevo": data.nombre_nuevo,
         "archivo_excel": ultimo_excel,
         "excel_base64": excel_base64,
         "detalle": resultado.stdout if resultado.stdout else resultado.stderr,
