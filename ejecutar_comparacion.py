@@ -13,61 +13,65 @@ carpeta_resultados = os.path.join(BASE_DIR, "Resultados")
 
 os.makedirs(carpeta_resultados, exist_ok=True)
 
+# 1. Validar parámetros recibidos desde FastAPI / Power Automate
 if len(sys.argv) < 3:
-    raise Exception("Debe recibir archivo_viejo y archivo_nuevo")
+    raise Exception("Debe recibir archivo_viejo y archivo_nuevo como argumentos.")
 
-archivo_viejo = sys.argv[1]
-archivo_nuevo = sys.argv[2]
+archivo_viejo = os.path.basename(sys.argv[1].strip())
+archivo_nuevo = os.path.basename(sys.argv[2].strip())
 
 archivo_anterior = os.path.join(carpeta_anterior, archivo_viejo)
-archivo_nuevo = os.path.join(carpeta_nuevo, archivo_nuevo)
+archivo_nuevo_path = os.path.join(carpeta_nuevo, archivo_nuevo)
 
+# 2. Verificar que los archivos decodificados existen
 if not os.path.exists(archivo_anterior):
-    raise Exception(f"No existe el archivo viejo: {archivo_anterior}")
+    raise Exception(f"No existe el archivo viejo en disco: {archivo_anterior}")
 
-if not os.path.exists(archivo_nuevo):
-    raise Exception(f"No existe el archivo nuevo: {archivo_nuevo}")
+if not os.path.exists(archivo_nuevo_path):
+    raise Exception(f"No existe el archivo nuevo en disco: {archivo_nuevo_path}")
 
-# Extraer información y comparar
+print(f"VIEJO: {archivo_viejo}")
+print(f"NUEVO: {archivo_nuevo}")
+
+# 3. Extraer información y comparar
 df_anterior = extraer_tabla(archivo_anterior)
-df_nuevo = extraer_tabla(archivo_nuevo)
+df_nuevo = extraer_tabla(archivo_nuevo_path)
 
 resultado = comparar(df_anterior, df_nuevo)
 
 fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
 excel_path = os.path.join(carpeta_resultados, f"Comparacion_{fecha}.xlsx")
-resultado.to_excel(excel_path, index=False)
 
-# Métricas (Sincronizadas en femenino con comparador.py)
+# Guardar Excel si hay datos
+if not resultado.empty:
+    resultado.to_excel(excel_path, index=False)
+
+# 4. Métricas alineadas exactamente en femenino con comparador.py
 if not resultado.empty and "Estado" in resultado.columns:
     agregadas = len(resultado[resultado["Estado"] == "AGREGADA"])
     modificadas = len(resultado[resultado["Estado"] == "MODIFICADA"])
     eliminadas = len(resultado[resultado["Estado"] == "ELIMINADA"])
-else:
-    agregadas = modificadas = eliminadas = 0
-
-# Filtrar únicamente los cambios reales (Femenino)
-if not resultado.empty and "Estado" in resultado.columns:
     df_cambios = resultado[resultado["Estado"].isin(["AGREGADA", "MODIFICADA", "ELIMINADA"])]
 else:
+    agregadas = modificadas = eliminadas = 0
     df_cambios = resultado
 
-# Detalle completo con el contenido original vs nuevo
+# 5. Armar detalle completo formateado para la IA
 detalle_completo = ""
 if not df_cambios.empty:
     for _, fila in df_cambios.iterrows():
         detalle_completo += (
             f"• Estado: {fila['Estado']}\n"
-            f"  Proceso: {fila.get('Proceso', 'N/A')}\n"
-            f"  Tarea: {fila.get('Tarea', 'N/A')}\n"
-            f"  Detalle/Impacto: {fila.get('Detalle', 'N/A')}\n\n"
+            f"  Proceso: {fila.get('Proceso', 'General')}\n"
+            f"  Tarea: {fila.get('Tarea', 'General')}\n"
+            f"  Detalle/Impacto: {fila.get('Detalle', 'Sin detalle')}\n\n"
         )
 
-# Crear documento Word
+# 6. Generar documento Word
 doc = Document()
 doc.add_heading('Informe de Comparación de Procedimientos', level=1)
-doc.add_paragraph(f'Documento anterior: {os.path.basename(archivo_anterior)}')
-doc.add_paragraph(f'Documento nuevo: {os.path.basename(archivo_nuevo)}')
+doc.add_paragraph(f'Documento anterior: {archivo_viejo}')
+doc.add_paragraph(f'Documento nuevo: {archivo_nuevo}')
 doc.add_paragraph(f'Agregadas: {agregadas}')
 doc.add_paragraph(f'Modificadas: {modificadas}')
 doc.add_paragraph(f'Eliminadas: {eliminadas}')
@@ -81,17 +85,14 @@ else:
 docx_path = os.path.join(carpeta_resultados, f"Informe_Comparacion_{fecha}.docx")
 doc.save(docx_path)
 
-# Salida formateada explícitamente para el Prompt de Power Automate / AI Builder
-texto_para_ia = detalle_completo.strip() if detalle_completo.strip() else "Sin cambios detectados entre ambas versiones."
+# 7. Salida por consola recibida por FastAPI (para la IA)
+texto_final_ia = detalle_completo.strip() if detalle_completo.strip() else "Sin cambios detectados en esta comparación."
 
 print(f"""
-VIEJO: {os.path.basename(archivo_anterior)}
-NUEVO: {os.path.basename(archivo_nuevo)}
-
 Procesos/Tareas Agregadas: {agregadas}
 Procesos/Tareas Modificadas: {modificadas}
 Procesos/Tareas Eliminadas: {eliminadas}
 
 DETALLE DE CAMBIOS DETECTADOS:
-{texto_para_ia}
+{texto_final_ia}
 """)
