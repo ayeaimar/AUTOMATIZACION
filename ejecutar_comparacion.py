@@ -75,9 +75,9 @@ excel_path = os.path.join(carpeta_resultados, f"Comparacion_{fecha}.xlsx")
 resultado.to_excel(excel_path, index=False)
 
 # Métricas (Alineadas sin espacios extra)
-agregadas = len(resultado[resultado["Estado"] == "AGREGADO"])
-modificadas = len(resultado[resultado["Estado"] == "MODIFICADO"])
-eliminadas = len(resultado[resultado["Estado"] == "ELIMINADO"])
+agregadas = len(resultado[resultado["Estado"] == "AGREGADA"])
+modificadas = len(resultado[resultado["Estado"] == "MODIFICADA"])
+eliminadas = len(resultado[resultado["Estado"] == "ELIMINADA"])
 
 # Imprimir en consola la cantidad de filas que detectó la comparación
 print(f"Total filas en resultado: {len(resultado)}")
