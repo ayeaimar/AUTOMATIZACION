@@ -79,6 +79,11 @@ agregadas = len(resultado[resultado["Estado"] == "AGREGADA"])
 modificadas = len(resultado[resultado["Estado"] == "MODIFICADA"])
 eliminadas = len(resultado[resultado["Estado"] == "ELIMINADA"])
 
+# Imprimir en consola la cantidad de filas que detectó la comparación
+print(f"Total filas en resultado: {len(resultado)}")
+if "Estado" in resultado.columns:
+    print(resultado["Estado"].value_counts())
+
 # Detalle de cambios
 detalle_completo = ""
 
