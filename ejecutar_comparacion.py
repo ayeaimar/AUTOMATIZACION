@@ -7,87 +7,228 @@ from comparador import comparar
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-carpeta_anterior = os.path.join(BASE_DIR, "Historial_Viejo")
-carpeta_nuevo = os.path.join(BASE_DIR, "Historial_Nuevo")
-carpeta_resultados = os.path.join(BASE_DIR, "Resultados")
+# Carpetas
+carpeta_anterior = os.path.join(
+    BASE_DIR,
+    "Historial_Viejo"
+)
 
-os.makedirs(carpeta_resultados, exist_ok=True)
+carpeta_nuevo = os.path.join(
+    BASE_DIR,
+    "Historial_Nuevo"
+)
 
-# Validar parámetros
+carpeta_resultados = os.path.join(
+    BASE_DIR,
+    "Resultados"
+)
+
+os.makedirs(
+    carpeta_resultados,
+    exist_ok=True
+)
+
+# Buscar DOCX
+archivos_viejos = [
+    os.path.join(carpeta_anterior, f)
+    for f in os.listdir(carpeta_anterior)
+    if f.lower().endswith(".docx")
+]
+
+archivos_nuevos = [
+    os.path.join(carpeta_nuevo, f)
+    for f in os.listdir(carpeta_nuevo)
+    if f.lower().endswith(".docx")
+]
+
+if not archivos_viejos:
+    raise Exception(
+        "No existen archivos en Historial_Viejo"
+    )
+
+if not archivos_nuevos:
+    raise Exception(
+        "No existen archivos en Historial_Nuevo"
+    )
+
+# Archivos recibidos desde Power Automate
+
 if len(sys.argv) < 3:
-    raise Exception("Debe recibir archivo_viejo y archivo_nuevo")
+    raise Exception(
+        "Debe recibir archivo_viejo y archivo_nuevo"
+    )
 
-archivo_viejo = os.path.basename(sys.argv[1].strip())
-archivo_nuevo = os.path.basename(sys.argv[2].strip())
+archivo_viejo = sys.argv[1]
+archivo_nuevo = sys.argv[2]
 
-archivo_anterior = os.path.join(carpeta_anterior, archivo_viejo)
-archivo_nuevo_path = os.path.join(carpeta_nuevo, archivo_nuevo)
+
+archivo_anterior = os.path.join(
+    carpeta_anterior,
+    archivo_viejo
+)
+
+archivo_nuevo = os.path.join(
+    carpeta_nuevo,
+    archivo_nuevo
+)
 
 if not os.path.exists(archivo_anterior):
-    raise Exception(f"No existe el archivo viejo: {archivo_anterior}")
+    raise Exception(
+        f"No existe el archivo viejo: {archivo_anterior}"
+    )
 
-if not os.path.exists(archivo_nuevo_path):
-    raise Exception(f"No existe el archivo nuevo: {archivo_nuevo_path}")
+if not os.path.exists(archivo_nuevo):
+    raise Exception(
+        f"No existe el archivo nuevo: {archivo_nuevo}"
+    )
 
-# Extraer y comparar
-df_anterior = extraer_tabla(archivo_anterior)
-df_nuevo = extraer_tabla(archivo_nuevo_path)
+print(
+    f"VIEJO: {os.path.basename(archivo_anterior)}"
+)
 
-resultado = comparar(df_anterior, df_nuevo)
+print(
+    f"NUEVO: {os.path.basename(archivo_nuevo)}"
+)
+# Extraer información
+df_anterior = extraer_tabla(
+    archivo_anterior
+)
 
-fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
-excel_path = os.path.join(carpeta_resultados, f"Comparacion_{fecha}.xlsx")
+df_nuevo = extraer_tabla(
+    archivo_nuevo
+)
 
-if not resultado.empty:
-    resultado.to_excel(excel_path, index=False)
+# Comparar
+resultado = comparar(
+    df_anterior,
+    df_nuevo
+)
 
-# CALCULO REAL DE MÉTRICAS (Descomentado y corregido)
-if not resultado.empty and "Estado" in resultado.columns:
-    agregadas = len(resultado[resultado["Estado"] == "AGREGADA"])
-    modificadas = len(resultado[resultado["Estado"] == "MODIFICADA"])
-    eliminadas = len(resultado[resultado["Estado"] == "ELIMINADA"])
-    df_cambios = resultado[resultado["Estado"].isin(["AGREGADA", "MODIFICADA", "ELIMINADA"])]
-else:
-    agregadas = modificadas = eliminadas = 0
-    df_cambios = resultado
+print("COLUMNAS:")
+print(resultado.columns.tolist())
 
-# Detalle completo para la IA
+print("RESULTADO:")
+print(resultado.head())
+
+# Timestamp
+fecha = datetime.now().strftime(
+    "%Y%m%d_%H%M%S"
+)
+
+# Archivos de salida
+excel_path = os.path.join(
+    carpeta_resultados,
+    f"Comparacion_{fecha}.xlsx"
+)
+
+
+# Guardar resultados
+resultado.to_excel(
+    excel_path,
+    index=False
+)
+
+
+# Métricas
+# agregadas = len(
+#    resultado[
+#        resultado["Estado"] == "AGREGADA"
+#    ]
+# )
+
+# modificadas = len(
+#    resultado[
+#        resultado["Estado"] == "MODIFICADA"
+#    ]
+# )
+
+# eliminadas = len(
+#    resultado[
+#        resultado["Estado"] == "ELIMINADA"
+#    ]
+# )
+
+agregadas = 0
+modificadas = 0
+eliminadas = 0
+
+# Detalle de cambios
 detalle_completo = ""
-if not df_cambios.empty:
-    for _, fila in df_cambios.iterrows():
-        detalle_completo += (
-            f"• Estado: {fila['Estado']}\n"
-            f"  Proceso: {fila.get('Proceso', 'General')}\n"
-            f"  Tarea: {fila.get('Tarea', 'General')}\n"
-            f"  Detalle/Impacto: {fila.get('Detalle', 'Sin detalle')}\n\n"
-        )
 
-# Crear Word local
+for _, fila in resultado.iterrows():
+
+    detalle_completo += (
+        f"Estado: {fila['Estado']}\n"
+        f"Proceso: {fila['Proceso']}\n"
+        f"Tarea: {fila['Tarea']}\n"
+        f"Detalle: {fila['Detalle']}\n\n"
+    )
+
+# Crear Word
+
 doc = Document()
-doc.add_heading('Informe de Comparación de Procedimientos', level=1)
-doc.add_paragraph(f'Documento anterior: {archivo_viejo}')
-doc.add_paragraph(f'Documento nuevo: {archivo_nuevo}')
-doc.add_paragraph(f'Agregadas: {agregadas}')
-doc.add_paragraph(f'Modificadas: {modificadas}')
-doc.add_paragraph(f'Eliminadas: {eliminadas}')
 
-doc.add_heading('Cambios detectados', level=2)
+doc.add_heading(
+    'Informe de Comparación de Procedimientos',
+    level=1
+)
+
+doc.add_paragraph(
+    f'Documento anterior: {os.path.basename(archivo_anterior)}'
+)
+
+doc.add_paragraph(
+    f'Documento nuevo: {os.path.basename(archivo_nuevo)}'
+)
+
+doc.add_paragraph(
+    f'Agregadas: {agregadas}'
+)
+
+doc.add_paragraph(
+    f'Modificadas: {modificadas}'
+)
+
+doc.add_paragraph(
+    f'Eliminadas: {eliminadas}'
+)
+
+doc.add_heading(
+    'Cambios detectados',
+    level=2
+)
+
 if detalle_completo.strip():
-    doc.add_paragraph(detalle_completo)
-else:
-    doc.add_paragraph('No se detectaron cambios entre ambas versiones.')
 
-docx_path = os.path.join(carpeta_resultados, f"Informe_Comparacion_{fecha}.docx")
+    doc.add_paragraph(detalle_completo)
+
+else:
+
+    doc.add_paragraph(
+        'No se detectaron cambios entre ambas versiones.'
+    )
+
+#Guardar word
+
+docx_path = os.path.join(
+    carpeta_resultados,
+    f"Informe_Comparacion_{fecha}.docx"
+)
+
 doc.save(docx_path)
 
-texto_para_ia = detalle_completo.strip() if detalle_completo.strip() else "Sin cambios detectados entre ambas versiones."
+# Salida para FastAPI
+print(
+    f"""
+VIEJO: {os.path.basename(archivo_anterior)}
+NUEVO: {os.path.basename(archivo_nuevo)}
 
-# Salida para FastAPI -> AI Builder
-print(f"""
-Procesos/Tareas Agregadas: {agregadas}
-Procesos/Tareas Modificadas: {modificadas}
-Procesos/Tareas Eliminadas: {eliminadas}
+Agregadas: {agregadas}
+Modificadas: {modificadas}
+Eliminadas: {eliminadas}
 
-DETALLE DE CAMBIOS DETECTADOS:
-{texto_para_ia}
-""")
+Cambios detectados:
+
+{detalle_completo}
+"""
+)
