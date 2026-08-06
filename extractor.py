@@ -42,7 +42,6 @@ def extraer_tabla(archivo):
         else:
             contenido_actual.append(texto)
 
-    # Capturar el último bloque
     if contenido_actual:
         datos.append({
             "Proceso": proceso_actual,
