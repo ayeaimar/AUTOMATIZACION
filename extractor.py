@@ -3,10 +3,10 @@ import pandas as pd
 
 def extraer_tabla(archivo):
     doc = Document(archivo)
-
     datos = []
+    
     proceso_actual = "General"
-    tarea_actual = "Inicio Documento"
+    tarea_actual = "Sección General"
     contenido_actual = []
 
     for p in doc.paragraphs:
@@ -15,38 +15,34 @@ def extraer_tabla(archivo):
             continue
 
         estilo = p.style.name.lower()
+        is_h1_h2 = "heading 1" in estilo or "heading 2" in estilo or "título 1" in estilo or "título 2" in estilo
+        is_h3_h4 = "heading 3" in estilo or "heading 4" in estilo or "título 3" in estilo or "título 4" in estilo
 
-        # Soporta estilos en inglés ("heading 2") y en español ("título 2")
-        is_h2 = "heading 2" in estilo or "título 2" in estilo or "titulo 2" in estilo
-        is_h3 = "heading 3" in estilo or "título 3" in estilo or "titulo 3" in estilo
-
-        if is_h2:
-            if contenido_actual or tarea_actual != "Inicio Documento":
+        if is_h1_h2:
+            if contenido_actual:
                 datos.append({
                     "Proceso": proceso_actual,
                     "Tarea": tarea_actual,
                     "Contenido": "\n".join(contenido_actual)
                 })
-
+                contenido_actual = []
             proceso_actual = texto
             tarea_actual = "General"
-            contenido_actual = []
 
-        elif is_h3:
-            if contenido_actual or tarea_actual != "Inicio Documento":
+        elif is_h3_h4:
+            if contenido_actual:
                 datos.append({
                     "Proceso": proceso_actual,
                     "Tarea": tarea_actual,
                     "Contenido": "\n".join(contenido_actual)
                 })
-
+                contenido_actual = []
             tarea_actual = texto
-            contenido_actual = []
 
         else:
             contenido_actual.append(texto)
 
-    # Agregar el último bloque leído
+    # Capturar el último bloque
     if contenido_actual:
         datos.append({
             "Proceso": proceso_actual,
