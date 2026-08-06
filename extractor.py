@@ -1,28 +1,27 @@
 from docx import Document
 import pandas as pd
 
-
 def extraer_tabla(archivo):
     doc = Document(archivo)
 
     datos = []
-
-    proceso_actual = ""
-    tarea_actual = ""
+    proceso_actual = "General"
+    tarea_actual = "Inicio Documento"
     contenido_actual = []
 
     for p in doc.paragraphs:
-
         texto = p.text.strip()
-
         if not texto:
             continue
 
-        estilo = p.style.name
+        estilo = p.style.name.lower()
 
-        if estilo == "Heading 2":
+        # Soporta estilos en inglés ("heading 2") y en español ("título 2")
+        is_h2 = "heading 2" in estilo or "título 2" in estilo or "titulo 2" in estilo
+        is_h3 = "heading 3" in estilo or "título 3" in estilo or "titulo 3" in estilo
 
-            if tarea_actual:
+        if is_h2:
+            if contenido_actual or tarea_actual != "Inicio Documento":
                 datos.append({
                     "Proceso": proceso_actual,
                     "Tarea": tarea_actual,
@@ -30,12 +29,11 @@ def extraer_tabla(archivo):
                 })
 
             proceso_actual = texto
-            tarea_actual = ""
+            tarea_actual = "General"
             contenido_actual = []
 
-        elif estilo == "Heading 3":
-
-            if tarea_actual:
+        elif is_h3:
+            if contenido_actual or tarea_actual != "Inicio Documento":
                 datos.append({
                     "Proceso": proceso_actual,
                     "Tarea": tarea_actual,
@@ -46,12 +44,10 @@ def extraer_tabla(archivo):
             contenido_actual = []
 
         else:
+            contenido_actual.append(texto)
 
-            if tarea_actual:
-                contenido_actual.append(texto)
-
-    if tarea_actual:
-
+    # Agregar el último bloque leído
+    if contenido_actual:
         datos.append({
             "Proceso": proceso_actual,
             "Tarea": tarea_actual,
