@@ -19,8 +19,10 @@ RESULTADOS_DIR = os.path.join(
 
 
 class ComparacionRequest(BaseModel):
-    archivo_viejo: str
-    archivo_nuevo: str
+    nombre_viejo: str
+    contenido_viejo_base64: str
+    nombre_nuevo: str
+    contenido_nuevo_base64: str
 
 
 @app.post("/comparar")
