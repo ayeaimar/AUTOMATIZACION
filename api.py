@@ -1,50 +1,73 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import base64
-import os
+
 import subprocess
+import os
+import glob
+import base64
 
 app = FastAPI()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HISTORIAL_VIEJO = os.path.join(BASE_DIR, "Historial_Viejo")
-HISTORIAL_NUEVO = os.path.join(BASE_DIR, "Historial_Nuevo")
-RESULTADOS_DIR = os.path.join(BASE_DIR, "Resultados")
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+RESULTADOS_DIR = os.path.join(
+    BASE_DIR,
+    "Resultados"
+)
+
 
 class ComparacionRequest(BaseModel):
-    nombre_viejo: str
-    contenido_viejo_base64: str
-    nombre_nuevo: str
-    contenido_nuevo_base64: str
+    archivo_viejo: str
+    archivo_nuevo: str
+
 
 @app.post("/comparar")
 def comparar(data: ComparacionRequest):
-    os.makedirs(HISTORIAL_VIEJO, exist_ok=True)
-    os.makedirs(HISTORIAL_NUEVO, exist_ok=True)
-    os.makedirs(RESULTADOS_DIR, exist_ok=True)
-
-    path_viejo = os.path.join(HISTORIAL_VIEJO, "documento_viejo.docx")
-    path_nuevo = os.path.join(HISTORIAL_NUEVO, "documento_nuevo.docx")
-
-    with open(path_viejo, "wb") as f:
-        f.write(base64.b64decode(data.contenido_viejo_base64))
-
-    with open(path_nuevo, "wb") as f:
-        f.write(base64.b64decode(data.contenido_nuevo_base64))
 
     resultado = subprocess.run(
-        ["python", "ejecutar_comparacion.py", "documento_viejo.docx", "documento_nuevo.docx"],
+        [
+            "python",
+            "ejecutar_comparacion.py",
+            data.archivo_viejo,
+            data.archivo_nuevo
+        ],
         capture_output=True,
         text=True
     )
 
-    detalle_texto = resultado.stdout if resultado.stdout else resultado.stderr
-    if len(detalle_texto) > 8000:
-        detalle_texto = detalle_texto[:8000] + "\n...[Detalle truncado por longitud]"
+    docxs = glob.glob(
+        os.path.join(
+            RESULTADOS_DIR,
+            "*.docx"
+        )
+    )
+
+    ultimo_docx = max(
+        docxs,
+        key=os.path.getmtime
+    ) if docxs else ""
+
+    docx_base64 = ""
+
+    if ultimo_docx:
+
+        with open(
+            ultimo_docx,
+            "rb"
+        ) as f:
+
+            docx_base64 = base64.b64encode(
+                f.read()
+            ).decode("utf-8")
 
     return {
         "estado": "ok",
-        "archivo_viejo": data.nombre_viejo,
-        "archivo_nuevo": data.nombre_nuevo,
-        "detalle": detalle_texto
+        "archivo_viejo": data.archivo_viejo,
+        "archivo_nuevo": data.archivo_nuevo,
+        "archivo_docx": ultimo_docx,
+        "docx_base64": docx_base64,
+        "detalle": resultado.stdout,
+        "error": resultado.stderr
     }
