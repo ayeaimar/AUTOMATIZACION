@@ -1,13 +1,20 @@
 import os
 import sys
+
 from datetime import datetime
+
+import pandas as pd
+
 from docx import Document
+
 from extractor import extraer_tabla
 from comparador import comparar
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Carpetas
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
 carpeta_anterior = os.path.join(
     BASE_DIR,
     "Historial_Viejo"
@@ -28,56 +35,33 @@ os.makedirs(
     exist_ok=True
 )
 
-# Buscar DOCX
-archivos_viejos = [
-    os.path.join(carpeta_anterior, f)
-    for f in os.listdir(carpeta_anterior)
-    if f.lower().endswith(".docx")
-]
-
-archivos_nuevos = [
-    os.path.join(carpeta_nuevo, f)
-    for f in os.listdir(carpeta_nuevo)
-    if f.lower().endswith(".docx")
-]
-
-if not archivos_viejos:
-    raise Exception(
-        "No existen archivos en Historial_Viejo"
-    )
-
-if not archivos_nuevos:
-    raise Exception(
-        "No existen archivos en Historial_Nuevo"
-    )
-
-# Archivos recibidos desde Power Automate
-
 if len(sys.argv) < 3:
+
     raise Exception(
         "Debe recibir archivo_viejo y archivo_nuevo"
     )
 
-archivo_viejo = sys.argv[1]
-archivo_nuevo = sys.argv[2]
-
+nombre_archivo_viejo = sys.argv[1]
+nombre_archivo_nuevo = sys.argv[2]
 
 archivo_anterior = os.path.join(
     carpeta_anterior,
-    archivo_viejo
+    nombre_archivo_viejo
 )
 
 archivo_nuevo = os.path.join(
     carpeta_nuevo,
-    archivo_nuevo
+    nombre_archivo_nuevo
 )
 
 if not os.path.exists(archivo_anterior):
+
     raise Exception(
         f"No existe el archivo viejo: {archivo_anterior}"
     )
 
 if not os.path.exists(archivo_nuevo):
+
     raise Exception(
         f"No existe el archivo nuevo: {archivo_nuevo}"
     )
@@ -89,7 +73,7 @@ print(
 print(
     f"NUEVO: {os.path.basename(archivo_nuevo)}"
 )
-# Extraer información
+
 df_anterior = extraer_tabla(
     archivo_anterior
 )
@@ -98,117 +82,101 @@ df_nuevo = extraer_tabla(
     archivo_nuevo
 )
 
-# Comparar
 resultado = comparar(
     df_anterior,
     df_nuevo
 )
 
-print("COLUMNAS:")
-print(resultado.columns.tolist())
-
-print("RESULTADO:")
-print(resultado.head())
-
-# Timestamp
 fecha = datetime.now().strftime(
     "%Y%m%d_%H%M%S"
 )
 
-# Archivos de salida
 excel_path = os.path.join(
     carpeta_resultados,
     f"Comparacion_{fecha}.xlsx"
 )
 
-
-# Guardar resultados
 resultado.to_excel(
     excel_path,
     index=False
 )
 
+agregadas = len(
+    resultado[
+        resultado["Estado"] == "AGREGADA"
+    ]
+) if not resultado.empty else 0
 
-# Métricas
-# agregadas = len(
-#    resultado[
-#        resultado["Estado"] == "AGREGADA"
-#    ]
-# )
+modificadas = len(
+    resultado[
+        resultado["Estado"] == "MODIFICADA"
+    ]
+) if not resultado.empty else 0
 
-# modificadas = len(
-#    resultado[
-#        resultado["Estado"] == "MODIFICADA"
-#    ]
-# )
+eliminadas = len(
+    resultado[
+        resultado["Estado"] == "ELIMINADA"
+    ]
+) if not resultado.empty else 0
 
-# eliminadas = len(
-#    resultado[
-#        resultado["Estado"] == "ELIMINADA"
-#    ]
-# )
-
-agregadas = 0
-modificadas = 0
-eliminadas = 0
-
-# Detalle de cambios
 detalle_completo = ""
 
-for _, fila in resultado.iterrows():
+if not resultado.empty:
 
-    detalle_completo += (
-        f"Estado: {fila['Estado']}\n"
-        f"Proceso: {fila['Proceso']}\n"
-        f"Tarea: {fila['Tarea']}\n"
-        f"Detalle: {fila['Detalle']}\n\n"
-    )
+    for _, fila in resultado.iterrows():
 
-# Crear Word
+        detalle_completo += (
+            f"Estado: {fila['Estado']}\n"
+            f"Proceso: {fila['Proceso']}\n"
+            f"Tarea: {fila['Tarea']}\n"
+            f"Detalle: {fila['Detalle']}\n\n"
+        )
 
 doc = Document()
 
 doc.add_heading(
-    'Informe de Comparación de Procedimientos',
+    "Informe de Comparación de Procedimientos",
     level=1
 )
 
 doc.add_paragraph(
-    f'Documento anterior: {os.path.basename(archivo_anterior)}'
+    f"Documento anterior: "
+    f"{os.path.basename(archivo_anterior)}"
 )
 
 doc.add_paragraph(
-    f'Documento nuevo: {os.path.basename(archivo_nuevo)}'
+    f"Documento nuevo: "
+    f"{os.path.basename(archivo_nuevo)}"
 )
 
 doc.add_paragraph(
-    f'Agregadas: {agregadas}'
+    f"Agregadas: {agregadas}"
 )
 
 doc.add_paragraph(
-    f'Modificadas: {modificadas}'
+    f"Modificadas: {modificadas}"
 )
 
 doc.add_paragraph(
-    f'Eliminadas: {eliminadas}'
+    f"Eliminadas: {eliminadas}"
 )
 
 doc.add_heading(
-    'Cambios detectados',
+    "Cambios detectados",
     level=2
 )
 
 if detalle_completo.strip():
 
-    doc.add_paragraph(detalle_completo)
+    doc.add_paragraph(
+        detalle_completo
+    )
 
 else:
 
     doc.add_paragraph(
-        'No se detectaron cambios entre ambas versiones.'
+        "No se detectaron cambios entre ambas versiones."
     )
-
-#Guardar word
 
 docx_path = os.path.join(
     carpeta_resultados,
@@ -217,7 +185,6 @@ docx_path = os.path.join(
 
 doc.save(docx_path)
 
-# Salida para FastAPI
 print(
     f"""
 VIEJO: {os.path.basename(archivo_anterior)}
