@@ -2,12 +2,9 @@ import base64
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-# Importamos el extractor corregido
 from extractor import extraer_tabla
 
 app = FastAPI()
-
 
 class RequestComparacion(BaseModel):
     nombre_viejo: str
@@ -15,11 +12,9 @@ class RequestComparacion(BaseModel):
     nombre_nuevo: str
     contenido_nuevo_base64: str
 
-
 def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
     resultado = []
 
-    # Asegurar que existan las columnas necesarias
     for df in [df_anterior, df_nuevo]:
         if df.empty:
             continue
@@ -27,70 +22,49 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
             if col not in df.columns:
                 df[col] = ""
 
-    # Si ambos DataFrames están vacíos, no hay nada que comparar
     if df_anterior.empty and df_nuevo.empty:
         return resultado
 
-    anterior = {}
-    if not df_anterior.empty:
-        anterior = {
-            (
-                str(r.get("Proceso", "")).strip(),
-                str(r.get("Tarea", "")).strip(),
-            ): str(r.get("Contenido", "")).strip()
-            for _, r in df_anterior.iterrows()
-        }
+    anterior = {
+        (str(r.get("Proceso", "")).strip(), str(r.get("Tarea", "")).strip()): str(r.get("Contenido", "")).strip()
+        for _, r in df_anterior.iterrows()
+    } if not df_anterior.empty else {}
 
-    nuevo = {}
-    if not df_nuevo.empty:
-        nuevo = {
-            (
-                str(r.get("Proceso", "")).strip(),
-                str(r.get("Tarea", "")).strip(),
-            ): str(r.get("Contenido", "")).strip()
-            for _, r in df_nuevo.iterrows()
-        }
+    nuevo = {
+        (str(r.get("Proceso", "")).strip(), str(r.get("Tarea", "")).strip()): str(r.get("Contenido", "")).strip()
+        for _, r in df_nuevo.iterrows()
+    } if not df_nuevo.empty else {}
 
-    # 1. Detectar Agregados y Modificados
     for clave, contenido_nuevo in nuevo.items():
         proceso, tarea = clave
-
         if clave not in anterior:
-            resultado.append(
-                {
-                    "Proceso": proceso if proceso else "General",
-                    "Tarea": tarea if tarea else "General",
-                    "Estado": "AGREGADA",
-                    "Detalle": f"Se agregó contenido: '{contenido_nuevo}'",
-                }
-            )
+            resultado.append({
+                "Proceso": proceso if proceso else "General",
+                "Tarea": tarea if tarea else "General",
+                "Estado": "AGREGADA",
+                "Detalle": f"Se agregó contenido: '{contenido_nuevo}'"
+            })
         else:
             contenido_viejo = anterior[clave]
             if contenido_viejo != contenido_nuevo:
-                resultado.append(
-                    {
-                        "Proceso": proceso if proceso else "General",
-                        "Tarea": tarea if tarea else "General",
-                        "Estado": "MODIFICADA",
-                        "Detalle": f"Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
-                    }
-                )
+                resultado.append({
+                    "Proceso": proceso if proceso else "General",
+                    "Tarea": tarea if tarea else "General",
+                    "Estado": "MODIFICADA",
+                    "Detalle": f"Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'"
+                })
 
-    # 2. Detectar Eliminados
     for clave, contenido_viejo in anterior.items():
         if clave not in nuevo:
             proceso, tarea = clave
-            resultado.append(
-                {
-                    "Proceso": proceso if proceso else "General",
-                    "Tarea": tarea if tarea else "General",
-                    "Estado": "ELIMINADA",
-                    "Detalle": f"Se eliminó contenido (Anterior: '{contenido_viejo}')",
-                }
-            )
+            resultado.append({
+                "Proceso": proceso if proceso else "General",
+                "Tarea": tarea if tarea else "General",
+                "Estado": "ELIMINADA",
+                "Detalle": f"Se eliminó contenido (Anterior: '{contenido_viejo}')"
+            })
 
     return resultado
-
 
 @app.post("/comparar")
 async def comparar_archivos(payload: RequestComparacion):
@@ -110,15 +84,13 @@ async def comparar_archivos(payload: RequestComparacion):
             ]
             detalle_texto = "\n".join(lineas_resumen)
         else:
-            detalle_texto = f"Sin diferencias detectadas entre '{payload.nombre_viejo}' y '{payload.nombre_nuevo}'."
+            detalle_texto = "Sin diferencias detectadas."
 
         return {
             "estado": "ok",
             "cambios": lista_cambios,
-            "detalle_texto": detalle_texto,
+            "detalle_texto": detalle_texto
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error en la comparación: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error en la comparación: {str(e)}")
