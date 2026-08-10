@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 
 from sharepoint import SharePointManager
-from comparator import compare_documents
+from comparador import compare_documents
 
 app = FastAPI(title="Control de Cambios de Documentos")
 templates = Jinja2Templates(directory="templates")
