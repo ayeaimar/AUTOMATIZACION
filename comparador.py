@@ -3,7 +3,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Importamos el extractor corregido que lee Títulos, Párrafos e Imágenes
+# Importamos el extractor corregido
 from extractor import extraer_tabla
 
 app = FastAPI()
@@ -19,25 +19,37 @@ class RequestComparacion(BaseModel):
 def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
     resultado = []
 
-    # Validar columnas necesarias
+    # Asegurar que existan las columnas necesarias
     for df in [df_anterior, df_nuevo]:
+        if df.empty:
+            continue
         for col in ["Proceso", "Tarea", "Contenido"]:
             if col not in df.columns:
                 df[col] = ""
 
-    anterior = {
-        (str(r["Proceso"]).strip(), str(r["Tarea"]).strip()): str(
-            r["Contenido"]
-        ).strip()
-        for _, r in df_anterior.iterrows()
-    }
+    # Si ambos DataFrames están vacíos, no hay nada que comparar
+    if df_anterior.empty and df_nuevo.empty:
+        return resultado
 
-    nuevo = {
-        (str(r["Proceso"]).strip(), str(r["Tarea"]).strip()): str(
-            r["Contenido"]
-        ).strip()
-        for _, r in df_nuevo.iterrows()
-    }
+    anterior = {}
+    if not df_anterior.empty:
+        anterior = {
+            (
+                str(r.get("Proceso", "")).strip(),
+                str(r.get("Tarea", "")).strip(),
+            ): str(r.get("Contenido", "")).strip()
+            for _, r in df_anterior.iterrows()
+        }
+
+    nuevo = {}
+    if not df_nuevo.empty:
+        nuevo = {
+            (
+                str(r.get("Proceso", "")).strip(),
+                str(r.get("Tarea", "")).strip(),
+            ): str(r.get("Contenido", "")).strip()
+            for _, r in df_nuevo.iterrows()
+        }
 
     # 1. Detectar Agregados y Modificados
     for clave, contenido_nuevo in nuevo.items():
@@ -46,10 +58,10 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
         if clave not in anterior:
             resultado.append(
                 {
-                    "Proceso": proceso,
-                    "Tarea": tarea,
+                    "Proceso": proceso if proceso else "General",
+                    "Tarea": tarea if tarea else "General",
                     "Estado": "AGREGADA",
-                    "Detalle": f"Se agregó la sección/tarea con contenido: '{contenido_nuevo}'",
+                    "Detalle": f"Se agregó contenido: '{contenido_nuevo}'",
                 }
             )
         else:
@@ -57,10 +69,10 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
             if contenido_viejo != contenido_nuevo:
                 resultado.append(
                     {
-                        "Proceso": proceso,
-                        "Tarea": tarea,
+                        "Proceso": proceso if proceso else "General",
+                        "Tarea": tarea if tarea else "General",
                         "Estado": "MODIFICADA",
-                        "Detalle": f"Se modificó el contenido. Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
+                        "Detalle": f"Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
                     }
                 )
 
@@ -70,10 +82,10 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
             proceso, tarea = clave
             resultado.append(
                 {
-                    "Proceso": proceso,
-                    "Tarea": tarea,
+                    "Proceso": proceso if proceso else "General",
+                    "Tarea": tarea if tarea else "General",
                     "Estado": "ELIMINADA",
-                    "Detalle": f"Se eliminó la sección/tarea (Contenido previo: '{contenido_viejo}')",
+                    "Detalle": f"Se eliminó contenido (Anterior: '{contenido_viejo}')",
                 }
             )
 
@@ -83,18 +95,14 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
 @app.post("/comparar")
 async def comparar_archivos(payload: RequestComparacion):
     try:
-        # Decodificación binaria de los Base64 de Power Automate
         bytes_viejo = base64.b64decode(payload.contenido_viejo_base64)
         bytes_nuevo = base64.b64decode(payload.contenido_nuevo_base64)
 
-        # Extracción procesando directamente en memoria mediante extractor.py
         df_viejo = extraer_tabla(bytes_viejo)
         df_nuevo = extraer_tabla(bytes_nuevo)
 
-        # Ejecución de la comparación
         lista_cambios = comparar_dfs(df_viejo, df_nuevo)
 
-        # Construcción del texto consolidado
         if lista_cambios:
             lineas_resumen = [
                 f"- [{c['Estado']}] Proceso: {c['Proceso']} | Tarea: {c['Tarea']} -> Detalle: {c['Detalle']}"
@@ -102,10 +110,10 @@ async def comparar_archivos(payload: RequestComparacion):
             ]
             detalle_texto = "\n".join(lineas_resumen)
         else:
-            detalle_texto = "Sin diferencias detectadas entre las versiones del documento."
+            detalle_texto = f"Sin diferencias detectadas entre '{payload.nombre_viejo}' y '{payload.nombre_nuevo}'."
 
         return {
-            "estado": "OK",
+            "estado": "ok",
             "cambios": lista_cambios,
             "detalle_texto": detalle_texto,
         }
