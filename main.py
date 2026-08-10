@@ -29,29 +29,30 @@ async def read_root(request: Request):
     })
 
 @app.post("/api/comparar")
-async def comparar_documentos(request: Request):
+async def comparar_documentos_api():
     global CURRENT_DF
-    try:
-        sp = SharePointManager()
-        
-        path_viejo = os.path.join(TEMP_DIR, "viejo.docx")
-        path_nuevo = os.path.join(TEMP_DIR, "nuevo.docx")
-        
-        name_viejo = sp.get_latest_file_from_folder("Control_Cambios/Historial_Viejo", path_viejo)
-        name_nuevo = sp.get_latest_file_from_folder("Control_Cambios/Historial_Nuevo", path_nuevo)
-        
-        df, counts = compare_documents(path_viejo, path_nuevo)
-        CURRENT_DF = df
-        
-        items = df.to_dict(orient="records") if not df.empty else []
-        
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "doc_viejo": name_viejo,
-            "doc_nuevo": name_nuevo,
-            "counts": counts,
-            "items": items
-        })
+    sp = SharePointManager()
+    
+    path_viejo = os.path.join(TEMP_DIR, "viejo.docx")
+    path_nuevo = os.path.join(TEMP_DIR, "nuevo.docx")
+    
+    name_viejo = sp.get_latest_file_from_folder("Control_Cambios/Historial_Viejo", path_viejo)
+    name_nuevo = sp.get_latest_file_from_folder("Control_Cambios/Historial_Nuevo", path_nuevo)
+    
+    df, counts = compare_documents(path_viejo, path_nuevo)
+    CURRENT_DF = df
+    
+    # Guardar Excel localmente para que se pueda descargar vía HTTP
+    excel_path = os.path.join(TEMP_DIR, "Resultado_Comparacion.xlsx")
+    df.to_excel(excel_path, index=False)
+    
+    return {
+        "status": "success",
+        "doc_viejo": name_viejo,
+        "doc_nuevo": name_nuevo,
+        "counts": counts,
+        "items": df.to_dict(orient="records") if not df.empty else []
+    }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
