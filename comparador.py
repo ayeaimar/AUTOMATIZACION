@@ -1,9 +1,10 @@
 import base64
-import io
 import pandas as pd
-from docx import Document
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+# Importamos el extractor corregido que lee Títulos, Párrafos e Imágenes
+from extractor import extraer_tabla
 
 app = FastAPI()
 
@@ -15,25 +16,14 @@ class RequestComparacion(BaseModel):
     contenido_nuevo_base64: str
 
 
-def extraer_tabla_docx(contenido_bytes: bytes) -> pd.DataFrame:
-    """Lee un binario .docx y extrae la tabla principal a Dataframe."""
-    doc = Document(io.BytesIO(contenido_bytes))
-    datos = []
-
-    for tabla in doc.tables:
-        headers = [cell.text.strip() for cell in tabla.rows[0].cells]
-        for row in tabla.rows[1:]:
-            valores = [cell.text.strip() for cell in row.cells]
-            if len(valores) == len(headers):
-                datos.append(dict(zip(headers, valores)))
-
-    df = pd.DataFrame(datos)
-    # Limpieza básica de espacios y nulos
-    return df.fillna("")
-
-
 def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
     resultado = []
+
+    # Validar columnas necesarias
+    for df in [df_anterior, df_nuevo]:
+        for col in ["Proceso", "Tarea", "Contenido"]:
+            if col not in df.columns:
+                df[col] = ""
 
     anterior = {
         (str(r["Proceso"]).strip(), str(r["Tarea"]).strip()): str(
@@ -59,7 +49,7 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
                     "Proceso": proceso,
                     "Tarea": tarea,
                     "Estado": "AGREGADA",
-                    "Detalle": f"Se agregó la tarea con contenido: '{contenido_nuevo}'",
+                    "Detalle": f"Se agregó la sección/tarea con contenido: '{contenido_nuevo}'",
                 }
             )
         else:
@@ -70,7 +60,7 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
                         "Proceso": proceso,
                         "Tarea": tarea,
                         "Estado": "MODIFICADA",
-                        "Detalle": f"Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
+                        "Detalle": f"Se modificó el contenido. Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
                     }
                 )
 
@@ -83,7 +73,7 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
                     "Proceso": proceso,
                     "Tarea": tarea,
                     "Estado": "ELIMINADA",
-                    "Detalle": f"Se eliminó la tarea (Contenido previo: '{contenido_viejo}')",
+                    "Detalle": f"Se eliminó la sección/tarea (Contenido previo: '{contenido_viejo}')",
                 }
             )
 
@@ -93,18 +83,18 @@ def comparar_dfs(df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame) -> list:
 @app.post("/comparar")
 async def comparar_archivos(payload: RequestComparacion):
     try:
-        # Decodificación binaria directa
+        # Decodificación binaria de los Base64 de Power Automate
         bytes_viejo = base64.b64decode(payload.contenido_viejo_base64)
         bytes_nuevo = base64.b64decode(payload.contenido_nuevo_base64)
 
-        # Extracción a DataFrames
-        df_viejo = extraer_tabla_docx(bytes_viejo)
-        df_nuevo = extraer_tabla_docx(bytes_nuevo)
+        # Extracción procesando directamente en memoria mediante extractor.py
+        df_viejo = extraer_tabla(bytes_viejo)
+        df_nuevo = extraer_tabla(bytes_nuevo)
 
-        # Ejecución del comparador
+        # Ejecución de la comparación
         lista_cambios = comparar_dfs(df_viejo, df_nuevo)
 
-        # Generación del texto consolidado para el Prompt de IA
+        # Construcción del texto consolidado
         if lista_cambios:
             lineas_resumen = [
                 f"- [{c['Estado']}] Proceso: {c['Proceso']} | Tarea: {c['Tarea']} -> Detalle: {c['Detalle']}"
@@ -112,9 +102,8 @@ async def comparar_archivos(payload: RequestComparacion):
             ]
             detalle_texto = "\n".join(lineas_resumen)
         else:
-            detalle_texto = "No se detectaron diferencias entre las versiones del documento."
+            detalle_texto = "Sin diferencias detectadas entre las versiones del documento."
 
-        # Retorno en el formato exacto que espera Parse JSON en Power Automate
         return {
             "estado": "OK",
             "cambios": lista_cambios,
