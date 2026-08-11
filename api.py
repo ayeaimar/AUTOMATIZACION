@@ -141,14 +141,16 @@ def comparar(data: ComparacionRequest):
             "estado": "ok",
             "cambios": filas_cambios,
             "detalle_texto": detalle_texto,
-            "nombre_viejo": nombre_viejo,
-            "nombre_nuevo": nombre_nuevo,
-            "largo_viejo": len(texto_viejo),
-            "largo_nuevo": len(texto_nuevo),
-            "inicio_viejo": texto_viejo[:300],
-            "inicio_nuevo": texto_nuevo[:300]
+            "estado": "debug",
+            "nombre_viejo": data.nombre_viejo,
+            "nombre_nuevo": data.nombre_nuevo,
+            "filas_viejo": len(df_viejo),
+            "filas_nuevo": len(df_nuevo),
+            "df_viejo": df_viejo.fillna("").to_dict("records"),
+            "df_nuevo": df_nuevo.fillna("").to_dict("records")
+
 }
-        }
+        
 
     except Exception as e:
         raise HTTPException(
