@@ -133,10 +133,6 @@ async def comparar_archivos(payload: ComparacionRequest):
             "estado": "ok",
             "cambios": lista_cambios,
             "detalle_texto": detalle_texto,
-            "filas_viejo": len(df_viejo),
-            "filas_nuevo": len(df_nuevo),
-            "df_viejo": df_viejo.fillna("").to_dict("records"),
-            "df_nuevo": df_nuevo.fillna("").to_dict("records"),
         }
 
     except Exception as e:
