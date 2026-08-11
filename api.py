@@ -1,9 +1,8 @@
 import base64
-import io
-import pandas as pd
-from docx import Document
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+from extractor import extraer_tabla
 
 app = FastAPI()
 
@@ -15,60 +14,42 @@ class ComparacionRequest(BaseModel):
     contenido_nuevo_base64: str
 
 
-def extraer_tabla_docx(contenido_bytes: bytes) -> pd.DataFrame:
-    """Lee el binario de Word en memoria y convierte sus tablas a DataFrame."""
-    try:
-        doc = Document(io.BytesIO(contenido_bytes))
-        datos = []
-
-        for tabla in doc.tables:
-            if not tabla.rows:
-                continue
-
-            # Obtiene encabezados de la primera fila
-            headers = [cell.text.strip() for cell in tabla.rows[0].cells]
-
-            # Extrae las filas restantes
-            for row in tabla.rows[1:]:
-                valores = [cell.text.strip() for cell in row.cells]
-                if len(valores) == len(headers):
-                    datos.append(dict(zip(headers, valores)))
-
-        df = pd.DataFrame(datos)
-        return df.fillna("")
-    except Exception as e:
-        print(f"Error al extraer tabla del docx: {e}")
-        return pd.DataFrame()
-
-
-def comparar_procedimientos(
-    df_anterior: pd.DataFrame, df_nuevo: pd.DataFrame
-) -> list:
-    """Compara procesos, tareas y contenidos entre dos versiones."""
+def comparar_procedimientos(df_anterior, df_nuevo):
     resultado = []
 
-    # Validar presencia de columnas mínimas
-    columnas_necesarias = {"Proceso", "Tarea", "Contenido"}
-    if not columnas_necesarias.issubset(
-        set(df_anterior.columns)
-    ) or not columnas_necesarias.issubset(set(df_nuevo.columns)):
-        return resultado
+    for df in [df_anterior, df_nuevo]:
+        if df.empty:
+            continue
 
-    anterior = {
-        (str(r["Proceso"]).strip(), str(r["Tarea"]).strip()): str(
-            r["Contenido"]
-        ).strip()
-        for _, r in df_anterior.iterrows()
-    }
+        for col in ["Proceso", "Tarea", "Contenido"]:
+            if col not in df.columns:
+                df[col] = ""
 
-    nuevo = {
-        (str(r["Proceso"]).strip(), str(r["Tarea"]).strip()): str(
-            r["Contenido"]
-        ).strip()
-        for _, r in df_nuevo.iterrows()
-    }
+    anterior = (
+        {
+            (
+                str(r["Proceso"]).strip(),
+                str(r["Tarea"]).strip(),
+            ): str(r["Contenido"]).strip()
+            for _, r in df_anterior.iterrows()
+        }
+        if not df_anterior.empty
+        else {}
+    )
 
-    # 1. Tareas Agregadas y Modificadas
+    nuevo = (
+        {
+            (
+                str(r["Proceso"]).strip(),
+                str(r["Tarea"]).strip(),
+            ): str(r["Contenido"]).strip()
+            for _, r in df_nuevo.iterrows()
+        }
+        if not df_nuevo.empty
+        else {}
+    )
+
+    # AGREGADAS Y MODIFICADAS
     for clave, contenido_nuevo in nuevo.items():
         proceso, tarea = clave
 
@@ -78,31 +59,36 @@ def comparar_procedimientos(
                     "Proceso": proceso,
                     "Tarea": tarea,
                     "Estado": "AGREGADA",
-                    "Detalle": f"Se agregó la tarea con contenido: '{contenido_nuevo}'",
+                    "Detalle": f"Se agregó contenido: {contenido_nuevo}",
                 }
             )
         else:
             contenido_viejo = anterior[clave]
+
             if contenido_viejo != contenido_nuevo:
                 resultado.append(
                     {
                         "Proceso": proceso,
                         "Tarea": tarea,
                         "Estado": "MODIFICADA",
-                        "Detalle": f"Antes: '{contenido_viejo}' | Ahora: '{contenido_nuevo}'",
+                        "Detalle": (
+                            f"Antes: {contenido_viejo} | "
+                            f"Ahora: {contenido_nuevo}"
+                        ),
                     }
                 )
 
-    # 2. Tareas Eliminadas
+    # ELIMINADAS
     for clave, contenido_viejo in anterior.items():
         if clave not in nuevo:
             proceso, tarea = clave
+
             resultado.append(
                 {
                     "Proceso": proceso,
                     "Tarea": tarea,
                     "Estado": "ELIMINADA",
-                    "Detalle": f"Se eliminó la tarea (Contenido previo: '{contenido_viejo}')",
+                    "Detalle": f"Contenido eliminado: {contenido_viejo}",
                 }
             )
 
@@ -110,49 +96,51 @@ def comparar_procedimientos(
 
 
 @app.post("/comparar")
-def comparar(data: ComparacionRequest):
+async def comparar_archivos(payload: ComparacionRequest):
     try:
-        # Decodificación en memoria
-        bytes_viejo = base64.b64decode(data.contenido_viejo_base64)
-        bytes_nuevo = base64.b64decode(data.contenido_nuevo_base64)
+        bytes_viejo = base64.b64decode(payload.contenido_viejo_base64)
+        bytes_nuevo = base64.b64decode(payload.contenido_nuevo_base64)
 
-        # Conversión directa a DataFrames
-        df_viejo = extraer_tabla_docx(bytes_viejo)
-        df_nuevo = extraer_tabla_docx(bytes_nuevo)
+        # USA TU extractor.py
+        df_viejo = extraer_tabla(bytes_viejo)
+        df_nuevo = extraer_tabla(bytes_nuevo)
 
-        # Ejecución del comparador de diferencias
-        filas_cambios = comparar_procedimientos(df_viejo, df_nuevo)
+        # DEBUG
+        print("FILAS VIEJO:", len(df_viejo))
+        print("FILAS NUEVO:", len(df_nuevo))
 
-        # Formatear el resumen de texto para la IA (Run a prompt)
-        if filas_cambios:
-            lineas = [
-                f"- [{c['Estado']}] Proceso: {c['Proceso']} | Tarea: {c['Tarea']} -> {c['Detalle']}"
-                for c in filas_cambios
-            ]
-            detalle_texto = (
-                f"Comparación entre '{data.nombre_viejo}' y '{data.nombre_nuevo}':\n"
-                + "\n".join(lineas)
+        lista_cambios = comparar_procedimientos(
+            df_viejo,
+            df_nuevo,
+        )
+
+        if lista_cambios:
+            detalle_texto = "\n".join(
+                [
+                    (
+                        f"[{c['Estado']}] "
+                        f"Proceso: {c['Proceso']} | "
+                        f"Tarea: {c['Tarea']} | "
+                        f"Detalle: {c['Detalle']}"
+                    )
+                    for c in lista_cambios
+                ]
             )
         else:
-            detalle_texto = f"Sin diferencias detectadas entre '{data.nombre_viejo}' y '{data.nombre_nuevo}'."
+            detalle_texto = "Sin diferencias detectadas."
 
-        # Retorno compatible con Parse JSON en Power Automate
         return {
             "estado": "ok",
-            "cambios": filas_cambios,
+            "cambios": lista_cambios,
             "detalle_texto": detalle_texto,
-            "estado": "debug",
-            "nombre_viejo": data.nombre_viejo,
-            "nombre_nuevo": data.nombre_nuevo,
             "filas_viejo": len(df_viejo),
             "filas_nuevo": len(df_nuevo),
             "df_viejo": df_viejo.fillna("").to_dict("records"),
-            "df_nuevo": df_nuevo.fillna("").to_dict("records")
-
-}
-        
+            "df_nuevo": df_nuevo.fillna("").to_dict("records"),
+        }
 
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Error en la API de comparación: {str(e)}"
+            status_code=500,
+            detail=f"Error en la comparación: {str(e)}",
         )
