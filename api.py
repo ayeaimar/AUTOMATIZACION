@@ -1,8 +1,5 @@
 import base64
-import tempfile
 import os
-import traceback
-import subprocess
 import base64
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -18,31 +15,6 @@ class ComparacionRequest(BaseModel):
     nombre_nuevo: str
     contenido_nuevo_base64: str
     
-def convertir_docx_a_pdf(docx_bytes):
-    with tempfile.TemporaryDirectory() as tmp:
-
-        ruta_docx = os.path.join(tmp, "documento.docx")
-
-        with open(ruta_docx, "wb") as f:
-            f.write(docx_bytes)
-
-        subprocess.run(
-            [
-                "libreoffice",
-                "--headless",
-                "--convert-to",
-                "pdf",
-                ruta_docx,
-                "--outdir",
-                tmp,
-            ],
-            check=True,
-        )
-
-        ruta_pdf = os.path.join(tmp, "documento.pdf")
-
-        with open(ruta_pdf, "rb") as f:
-            return f.read()
 
 def comparar_procedimientos(df_anterior, df_nuevo):
     resultado = []
@@ -130,16 +102,6 @@ async def comparar_archivos(payload: ComparacionRequest):
     try:
         bytes_viejo = base64.b64decode(payload.contenido_viejo_base64)
         bytes_nuevo = base64.b64decode(payload.contenido_nuevo_base64)
-
-        print("INICIANDO CONVERSION PDF")
-        # Generar PDF de la última versión
-        pdf_bytes = convertir_docx_a_pdf(bytes_nuevo)
-
-        print("PDF GENERADO")
-        
-        pdf_base64 = base64.b64encode(
-            pdf_bytes
-        ).decode("utf-8")
         
         # USA TU extractor.py
         df_viejo = extraer_tabla(bytes_viejo)
@@ -173,17 +135,9 @@ async def comparar_archivos(payload: ComparacionRequest):
             "estado": "ok",
             "cambios": lista_cambios,
             "detalle_texto": detalle_texto,
-            "pdf_base64": pdf_base64,
-            "nombre_pdf": payload.nombre_nuevo.replace(
-                ".docx",
-                ".pdf" 
-            )
         }
 
     except Exception as e:
-       print("ERROR COMPLETO:")
-       print(traceback.format_exc())
-
        raise HTTPException(
            status_code=500,
            detail=f"Error en la comparación: {str(e)}",
