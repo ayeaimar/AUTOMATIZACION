@@ -1,6 +1,8 @@
 import base64
 import tempfile
 import os
+import traceback
+import subprocess
 import base64
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -129,8 +131,11 @@ async def comparar_archivos(payload: ComparacionRequest):
         bytes_viejo = base64.b64decode(payload.contenido_viejo_base64)
         bytes_nuevo = base64.b64decode(payload.contenido_nuevo_base64)
 
+        print("INICIANDO CONVERSION PDF")
         # Generar PDF de la última versión
         pdf_bytes = convertir_docx_a_pdf(bytes_nuevo)
+
+        print("PDF GENERADO")
         
         pdf_base64 = base64.b64encode(
             pdf_bytes
@@ -176,7 +181,10 @@ async def comparar_archivos(payload: ComparacionRequest):
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error en la comparación: {str(e)}",
-        )
+       print("ERROR COMPLETO:")
+       print(traceback.format_exc())
+
+       raise HTTPException(
+           status_code=500,
+           detail=f"Error en la comparación: {str(e)}",
+    )
